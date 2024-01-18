@@ -73,8 +73,14 @@ const registerUser = asyncHandler(async (req, res) => {
     username: username.toLowerCase(),
     email,
     fullName,
-    avatar: avatar.url,
-    coverImage: coverImage?.url || "",
+    avatar: {
+      publicId: avatar.public_id,
+      url: avatar.url,
+    },
+    coverImage: {
+      publicId: coverImage?.public_id || "",
+      url: coverImage?.url || "",
+    },
     password,
   });
 
@@ -279,13 +285,16 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Error while uploading avatar on cloudinary!");
   }
 
-  await deleteFileFromCloudinary(req.user?.avatar);
+  await deleteFileFromCloudinary(req.user?.avatar.publicId);
 
   const updatedUser = await User.findByIdAndUpdate(
     req.user._id,
     {
       $set: {
-        avatar: avatar.url,
+        avatar: {
+          publicId: avatar.public_id,
+          url: avatar.url,
+        },
       },
     },
     { new: true }
@@ -309,13 +318,16 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Error while uploading cover image on cloudinary!");
   }
 
-  await deleteFileFromCloudinary(req.user?.coverImage);
+  await deleteFileFromCloudinary(req.user?.coverImage.publicId);
 
   const updatedUser = await User.findByIdAndUpdate(
     req.user._id,
     {
       $set: {
-        coverImage: coverImage.url,
+        coverImage: {
+          publicId: coverImage.public_id,
+          url: coverImage.url,
+        },
       },
     },
     { new: true }

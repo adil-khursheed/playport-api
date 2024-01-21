@@ -18,7 +18,36 @@ const uploadOnCloudinary = async (localFilePath) => {
     });
 
     // file has been uploaded successfully
-    // console.log("File has been uploaded on cloudinary ", response.url);
+    console.log("Upload file: ", response);
+    fs.unlinkSync(localFilePath);
+    return response;
+  } catch (error) {
+    fs.unlinkSync(localFilePath); //remove the locally saved temporary file as the upload operation failed
+    return null;
+  }
+};
+
+const uploadVideoOnCloudinary = async (localFilePath) => {
+  try {
+    if (!localFilePath) return null;
+
+    // upload file on cloudinary
+    const response = await new Promise((resolve, reject) => {
+      cloudinary.uploader.upload_large(
+        localFilePath,
+        {
+          resource_type: "video",
+          folder: "chai-aur-backend",
+        },
+        (error, result) => {
+          if (error) {
+            reject(error);
+          }
+          resolve(result);
+        }
+      );
+    });
+    console.log("Upload video: ", response);
     fs.unlinkSync(localFilePath);
     return response;
   } catch (error) {
@@ -37,4 +66,8 @@ const deleteFileFromCloudinary = async (publicId) => {
   }
 };
 
-export { uploadOnCloudinary, deleteFileFromCloudinary };
+export {
+  uploadOnCloudinary,
+  uploadVideoOnCloudinary,
+  deleteFileFromCloudinary,
+};

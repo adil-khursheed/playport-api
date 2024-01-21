@@ -75,11 +75,11 @@ const registerUser = asyncHandler(async (req, res) => {
     fullName,
     avatar: {
       publicId: avatar.public_id,
-      url: avatar.url,
+      url: avatar.secure_url,
     },
     coverImage: {
       publicId: coverImage?.public_id || "",
-      url: coverImage?.url || "",
+      url: coverImage?.secure_url || "",
     },
     password,
   });

@@ -1,8 +1,11 @@
+import mongoose from "mongoose";
 import { Video } from "../models/video.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
+  deleteFileFromCloudinary,
+  deleteVideoFromCloudinary,
   uploadOnCloudinary,
   uploadVideoOnCloudinary,
 } from "../utils/cloudinary.js";
@@ -52,7 +55,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
     title,
     description,
     duration: videoFile?.duration,
-    owner: req.user._id,
+    owner: req.user?._id,
   });
 
   const createdVideo = await Video.findById(video._id);
@@ -66,4 +69,298 @@ const publishAVideo = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, createdVideo, "Video published successfully!"));
 });
 
-export { getAllVideos, publishAVideo };
+const getVideoById = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+
+  if (!videoId) {
+    throw new ApiError(404, `Video with video ID ${videoId} does not exists!`);
+  }
+
+  const video = await Video.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(videoId),
+      },
+    },
+    {
+      $lookup: {
+        from: "comments",
+        localField: "_id",
+        foreignField: "video",
+        as: "comments",
+      },
+    },
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "video",
+        as: "likes",
+      },
+    },
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "video",
+        as: "isLiked",
+        pipeline: [
+          {
+            $match: {
+              likedBy: new mongoose.Types.ObjectId(req.user?._id),
+            },
+          },
+        ],
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "owner",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              fullName: 1,
+              avatar: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        owner: { $first: "$owner" },
+        likes: { $size: "$likes" },
+        comments: { $size: "$comments" },
+        isLiked: {
+          $cond: {
+            if: {
+              $gte: [
+                {
+                  $size: "$isLiked",
+                },
+                1,
+              ],
+            },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+  ]);
+
+  // console.log(video);
+
+  if (!video[0]) {
+    throw new ApiError(404, "Video does not exists!");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, video[0], "Video fetched successfully!"));
+});
+
+const updateVideo = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+  const { title, description } = req.body;
+
+  const video = await Video.findOne({
+    _id: new mongoose.Types.ObjectId(videoId),
+    owner: req.user?._id,
+  });
+
+  if (!video) {
+    throw new ApiError(404, "Video does not exists!");
+  }
+
+  let newThumbnailLocalPath = req.file?.path;
+  let thumbnail;
+
+  if (newThumbnailLocalPath) {
+    thumbnail = await uploadOnCloudinary(newThumbnailLocalPath);
+
+    if (!thumbnail.secure_url) {
+      throw new ApiError(
+        400,
+        "Error while uploading the thumbnail on cloudinary!"
+      );
+    }
+
+    await deleteFileFromCloudinary(video.thumbnail.publicId);
+  }
+
+  const updatedVideo = await Video.findByIdAndUpdate(
+    videoId,
+    {
+      $set: {
+        title,
+        description,
+        thumbnail: {
+          publicId: thumbnail?.public_id || video.thumbnail.publicId,
+          url: thumbnail?.secure_url || video.thumbnail.url,
+        },
+      },
+    },
+    {
+      new: true,
+    }
+  );
+
+  const aggregatedVideo = await Video.aggregate([
+    {
+      $match: {
+        _id: updatedVideo._id,
+      },
+    },
+    {
+      $lookup: {
+        from: "comments",
+        localField: "_id",
+        foreignField: "video",
+        as: "comments",
+      },
+    },
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "video",
+        as: "likes",
+      },
+    },
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "video",
+        as: "isLiked",
+        pipeline: [
+          {
+            $match: {
+              likedBy: new mongoose.Types.ObjectId(req.user?._id),
+            },
+          },
+        ],
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "owner",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              fullName: 1,
+              avatar: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        owner: { $first: "$owner" },
+        likes: { $size: "$likes" },
+        comments: { $size: "$comments" },
+        isLiked: {
+          $cond: {
+            if: {
+              $gte: [
+                {
+                  $size: "$isLiked",
+                },
+                1,
+              ],
+            },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+  ]);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, aggregatedVideo[0], "Video updated successfully!")
+    );
+});
+
+const deleteVideo = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+
+  const video = await Video.findOne({
+    _id: videoId,
+    owner: req.user?._id,
+  });
+
+  if (!video) {
+    throw new ApiError(404, "Video does not exist!");
+  }
+
+  await deleteFileFromCloudinary(video.thumbnail.publicId);
+  await deleteVideoFromCloudinary(video.videoFile.publicId);
+
+  await Video.deleteOne({
+    _id: videoId,
+    owner: req.user?._id,
+  });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Video deleted successfully!"));
+});
+
+const togglePublishStatus = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+
+  const video = await Video.findOne({
+    _id: new mongoose.Types.ObjectId(videoId),
+    owner: req.user?._id,
+  });
+
+  if (!video) {
+    throw new ApiError(404, "Video does not exist!");
+  }
+
+  await Video.findByIdAndUpdate(
+    videoId,
+    {
+      $set: {
+        isPublished: !video.isPublished,
+      },
+    },
+    {
+      new: true,
+    }
+  );
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        {},
+        video.isPublished === true
+          ? "Video unpublished successfully"
+          : "Video published successfully!"
+      )
+    );
+});
+
+export {
+  getAllVideos,
+  publishAVideo,
+  getVideoById,
+  updateVideo,
+  deleteVideo,
+  togglePublishStatus,
+};

@@ -21,11 +21,13 @@ import userRoute from "./routes/user.routes.js";
 import videoRoute from "./routes/video.routes.js";
 import tweetRoute from "./routes/tweet.routes.js";
 import subscriptionRoute from "./routes/subscription.routes.js";
+import playlistRoute from "./routes/playlist.routes.js";
 
 // routes declaration
 app.use("/api/v1/users", userRoute);
 app.use("/api/v1/videos", videoRoute);
 app.use("/api/v1/tweets", tweetRoute);
 app.use("/api/v1/subscriptions", subscriptionRoute);
+app.use("/api/v1/playlist", playlistRoute);
 
 export { app };

@@ -12,7 +12,91 @@ import {
 
 const getAllVideos = asyncHandler(async (req, res) => {
   const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
-  // TODO: get all videos based on query,sort,pagination
+
+  const videoAggregation = Video.aggregate([
+    {
+      $match: userId
+        ? {
+            owner: new mongoose.Types.ObjectId(userId),
+          }
+        : {},
+    },
+    {
+      $match:
+        query?.length > 0
+          ? {
+              $or: [
+                {
+                  title: {
+                    $regex: query,
+                    $options: "i",
+                  },
+                },
+                {
+                  description: {
+                    $regex: query,
+                    $options: "i",
+                  },
+                },
+              ],
+            }
+          : {},
+    },
+    {
+      $match: {
+        isPublished: true,
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "owner",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              fullName: 1,
+              avatar: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        owner: {
+          $first: "$owner",
+        },
+      },
+    },
+    {
+      $sort: {
+        [sortBy]: sortType === "desc" ? -1 : 1,
+      },
+    },
+    {
+      $skip: (parseInt(page) - 1) * parseInt(limit),
+    },
+    {
+      $limit: parseInt(limit),
+    },
+  ]);
+
+  const videos = await Video.aggregatePaginate(videoAggregation, {
+    page,
+    limit,
+    customLabels: {
+      totalDocs: "totalVideos",
+      docs: "videos",
+      pagingCounter: "serialNumberStartFrom",
+    },
+  });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, videos, "Videos fetched successfully!"));
 });
 
 const publishAVideo = asyncHandler(async (req, res) => {
@@ -58,7 +142,82 @@ const publishAVideo = asyncHandler(async (req, res) => {
     owner: req.user?._id,
   });
 
-  const createdVideo = await Video.findById(video._id);
+  const createdVideo = await Video.aggregate([
+    {
+      $match: {
+        _id: video._id,
+      },
+    },
+    {
+      $lookup: {
+        from: "comments",
+        localField: "_id",
+        foreignField: "video",
+        as: "comments",
+      },
+    },
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "video",
+        as: "likes",
+      },
+    },
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "video",
+        as: "isLiked",
+        pipeline: [
+          {
+            $match: {
+              likedBy: new mongoose.Types.ObjectId(req.user?._id),
+            },
+          },
+        ],
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "owner",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              fullName: 1,
+              avatar: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        owner: { $first: "$owner" },
+        likes: { $size: "$likes" },
+        comments: { $size: "$comments" },
+        isLiked: {
+          $cond: {
+            if: {
+              $gte: [
+                {
+                  $size: "$isLiked",
+                },
+                1,
+              ],
+            },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+  ]);
 
   if (!createdVideo) {
     throw new ApiError(400, "Something went wrong while publishing the video!");
@@ -66,7 +225,9 @@ const publishAVideo = asyncHandler(async (req, res) => {
 
   return res
     .status(201)
-    .json(new ApiResponse(200, createdVideo, "Video published successfully!"));
+    .json(
+      new ApiResponse(200, createdVideo[0], "Video published successfully!")
+    );
 });
 
 const getVideoById = asyncHandler(async (req, res) => {
@@ -310,7 +471,7 @@ const deleteVideo = asyncHandler(async (req, res) => {
   await deleteVideoFromCloudinary(video.videoFile.publicId);
 
   await Video.deleteOne({
-    _id: videoId,
+    _id: video._id,
     owner: req.user?._id,
   });
 
@@ -332,7 +493,7 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
   }
 
   await Video.findByIdAndUpdate(
-    videoId,
+    video._id,
     {
       $set: {
         isPublished: !video.isPublished,

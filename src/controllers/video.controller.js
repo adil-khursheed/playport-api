@@ -237,10 +237,22 @@ const getVideoById = asyncHandler(async (req, res) => {
     throw new ApiError(404, `Video with video ID ${videoId} does not exists!`);
   }
 
-  const video = await Video.aggregate([
+  const video = await Video.findByIdAndUpdate(
+    videoId,
+    {
+      $inc: {
+        views: 1,
+      },
+    },
+    {
+      new: true,
+    }
+  );
+
+  const videoAggregation = await Video.aggregate([
     {
       $match: {
-        _id: new mongoose.Types.ObjectId(videoId),
+        _id: new mongoose.Types.ObjectId(video._id),
       },
     },
     {
@@ -314,15 +326,17 @@ const getVideoById = asyncHandler(async (req, res) => {
     },
   ]);
 
-  // console.log(video);
+  // console.log(videoAggregation);
 
-  if (!video[0]) {
+  if (!videoAggregation[0]) {
     throw new ApiError(404, "Video does not exists!");
   }
 
   return res
     .status(200)
-    .json(new ApiResponse(200, video[0], "Video fetched successfully!"));
+    .json(
+      new ApiResponse(200, videoAggregation[0], "Video fetched successfully!")
+    );
 });
 
 const updateVideo = asyncHandler(async (req, res) => {

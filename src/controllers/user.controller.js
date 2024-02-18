@@ -84,6 +84,10 @@ const registerUser = asyncHandler(async (req, res) => {
     password,
   });
 
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+    user._id
+  );
+
   const createdUser = await User.findById(user._id).select(
     "-password -refreshToken"
   );
@@ -92,9 +96,22 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(500, "Something went wrong while registering the user!");
   }
 
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+
   return res
     .status(201)
-    .json(new ApiResponse(200, createdUser, "User registered successfully!"));
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+      new ApiResponse(
+        200,
+        { user: createdUser, accessToken, refreshToken },
+        "User registered successfully!"
+      )
+    );
 });
 
 const loginUser = asyncHandler(async (req, res) => {
@@ -197,7 +214,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
       throw new ApiError(401, "Refresh token is expired or used!");
     }
 
-    const { accessToken, newRefreshToken } =
+    const { accessToken, refreshToken: newRefreshToken } =
       await generateAccessAndRefreshTokens(user._id);
 
     const options = {
@@ -399,8 +416,6 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
       },
     },
   ]);
-
-  console.log(channel);
 
   if (!channel?.length) {
     throw new ApiError(400, "Channel does not exists!");

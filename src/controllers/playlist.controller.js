@@ -62,6 +62,7 @@ const getUserPlaylists = asyncHandler(async (req, res) => {
     {
       $project: {
         name: 1,
+        description: 1,
         videos: 1,
         createdAt: 1,
       },
@@ -131,6 +132,7 @@ const getPlaylistById = asyncHandler(async (req, res) => {
               views: 1,
               isPublished: 1,
               owner: 1,
+              duration: 1,
             },
           },
         ],

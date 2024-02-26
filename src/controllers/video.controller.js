@@ -9,6 +9,7 @@ import {
   uploadOnCloudinary,
   uploadVideoOnCloudinary,
 } from "../utils/cloudinary.js";
+import { Playlist } from "../models/playlist.model.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
   const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
@@ -505,6 +506,10 @@ const deleteVideo = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Video does not exist!");
   }
 
+  const playlist = await Playlist.findOne({
+    owner: req.user?._id,
+  });
+
   await deleteFileFromCloudinary(video.thumbnail.publicId);
   await deleteVideoFromCloudinary(video.videoFile.publicId);
 
@@ -512,6 +517,11 @@ const deleteVideo = asyncHandler(async (req, res) => {
     _id: video._id,
     owner: req.user?._id,
   });
+
+  playlist.videos = playlist.videos.filter(
+    (filteredVideo) => filteredVideo !== video._id
+  );
+  await playlist.save();
 
   return res
     .status(200)

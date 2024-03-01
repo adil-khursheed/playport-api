@@ -133,6 +133,7 @@ const getPlaylistById = asyncHandler(async (req, res) => {
               isPublished: 1,
               owner: 1,
               duration: 1,
+              createdAt: 1,
             },
           },
         ],

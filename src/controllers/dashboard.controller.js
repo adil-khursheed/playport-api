@@ -96,8 +96,11 @@ const getChannelVideos = asyncHandler(async (req, res) => {
       },
     },
     {
-      $match: {
-        isPublished: true,
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "video",
+        as: "likes",
       },
     },
     {
@@ -121,6 +124,9 @@ const getChannelVideos = asyncHandler(async (req, res) => {
       $addFields: {
         owner: {
           $first: "$owner",
+        },
+        likes: {
+          $size: "$likes",
         },
       },
     },

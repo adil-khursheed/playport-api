@@ -518,10 +518,12 @@ const deleteVideo = asyncHandler(async (req, res) => {
     owner: req.user?._id,
   });
 
-  playlist.videos = playlist.videos.filter(
-    (filteredVideo) => filteredVideo !== video._id
-  );
-  await playlist.save();
+  if (playlist) {
+    playlist.videos = playlist.videos.filter(
+      (filteredVideo) => filteredVideo !== video._id
+    );
+    await playlist.save();
+  }
 
   return res
     .status(200)

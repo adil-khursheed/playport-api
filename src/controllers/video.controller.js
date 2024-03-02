@@ -518,7 +518,10 @@ const deleteVideo = asyncHandler(async (req, res) => {
     owner: req.user?._id,
   });
 
-  if (playlist) {
+  if (
+    playlist &&
+    playlist.videos.includes(new mongoose.Types.ObjectId(videoId))
+  ) {
     playlist.videos = playlist.videos.filter(
       (filteredVideo) => filteredVideo !== video._id
     );

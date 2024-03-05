@@ -10,6 +10,9 @@ import {
   uploadVideoOnCloudinary,
 } from "../utils/cloudinary.js";
 import { Playlist } from "../models/playlist.model.js";
+import { User } from "../models/user.model.js";
+import { Like } from "../models/like.model.js";
+import { Comment } from "../models/comment.model.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
   const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
@@ -351,11 +354,36 @@ const getVideoById = asyncHandler(async (req, res) => {
     },
   ]);
 
-  // console.log(videoAggregation);
-
   if (!videoAggregation[0]) {
     throw new ApiError(404, "Video does not exists!");
   }
+
+  await User.findByIdAndUpdate(
+    req?.user?._id,
+    {
+      $pull: {
+        watchHistory: new mongoose.Types.ObjectId(video._id),
+      },
+    },
+    {
+      new: true,
+    }
+  );
+
+  await User.findByIdAndUpdate(
+    req?.user?._id,
+    {
+      $push: {
+        watchHistory: {
+          $each: [new mongoose.Types.ObjectId(video._id)],
+          $position: 0,
+        },
+      },
+    },
+    {
+      new: true,
+    }
+  );
 
   return res
     .status(200)
@@ -506,15 +534,38 @@ const deleteVideo = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Video does not exist!");
   }
 
-  const playlist = await Playlist.findOne({
-    owner: req.user?._id,
-  });
-
   await deleteFileFromCloudinary(video.thumbnail.publicId);
   await deleteVideoFromCloudinary(video.videoFile.publicId);
 
+  // Delete the video
   await Video.deleteOne({
     _id: video._id,
+    owner: req.user?._id,
+  });
+
+  // Delete the comment associated with the video
+  await Comment.deleteMany({
+    video: video._id,
+  });
+
+  // Delete the likes associated with the video
+  await Like.deleteMany({
+    video: video._id,
+  });
+
+  // Delete the liked comments associated with the video
+  const comments = await Comment.find({
+    video: video._id,
+  });
+
+  for (const comment of comments) {
+    await Like.deleteMany({
+      comment: comment._id,
+    });
+  }
+
+  // Delete video from playlist if there is
+  const playlist = await Playlist.findOne({
     owner: req.user?._id,
   });
 

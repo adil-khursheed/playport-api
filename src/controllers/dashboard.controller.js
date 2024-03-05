@@ -7,7 +7,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 const getChannelStats = asyncHandler(async (req, res) => {
-  const channelStats = await Video.aggregate([
+  const channelStatsAggregation = await Video.aggregate([
     {
       $match: {
         owner: new mongoose.Types.ObjectId(req.user?._id),
@@ -49,40 +49,42 @@ const getChannelStats = asyncHandler(async (req, res) => {
       },
     },
     {
-      $addFields: {
-        owner: new mongoose.Types.ObjectId(req.user?._id),
+      $project: {
+        _id: 0,
+      },
+    },
+  ]);
+
+  const channelSubscriberStatsAggregation = await Subscription.aggregate([
+    {
+      $match: {
+        channel: new mongoose.Types.ObjectId(req.user?._id),
       },
     },
     {
-      $lookup: {
-        from: "subscriptions",
-        localField: "owner",
-        foreignField: "channel",
-        as: "subscribers",
-      },
-    },
-    {
-      $addFields: {
+      $group: {
+        _id: null,
         totalSubscribers: {
-          $size: "$subscribers",
+          $sum: 1,
         },
       },
     },
     {
       $project: {
         _id: 0,
-        owner: 0,
-        subscribers: 0,
       },
     },
   ]);
+
+  const channelStats = channelStatsAggregation[0];
+  const channelSubscriberStats = channelSubscriberStatsAggregation[0];
 
   return res
     .status(200)
     .json(
       new ApiResponse(
         200,
-        channelStats[0],
+        { ...channelStats, ...channelSubscriberStats },
         "Channel stats fetched successfully!"
       )
     );
